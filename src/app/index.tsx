@@ -1,98 +1,227 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState, useEffect, useMemo } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Header } from "@/components/Header";
+import { TodoForm } from "@/components/TodoForm";
+import { TodoList } from "@/components/TodoList";
+import type { Todo } from "@/types";
+import {
+  getTodos,
+  addTodo,
+  toggleTodo,
+  updateTodoText,
+  deleteTodo,
+} from "@/services/api";
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+export default function Index() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+  const fetchTodos = async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+      const data = await getTodos();
+      setTodos(data);
+    } catch (err) {
+      setError(
+        "Не вдалося з'єднатися з сервером. Переконайтеся, що json-server запущено (порт 3000).",
+      );
+      console.error(err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTodos();
+  }, []);
+
+  const handleAdd = async (text: string) => {
+    try {
+      const newTodo = await addTodo(text);
+      setTodos((prev) => [...prev, newTodo]);
+    } catch (err) {
+      Alert.alert("Помилка", "Не вдалося створити завдання.");
+      console.error(err);
+    }
+  };
+
+  const handleToggle = async (id: string, completed: boolean) => {
+    try {
+      setTodos((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, completed } : t)),
+      );
+      await toggleTodo(id, completed);
+    } catch (err) {
+      setTodos((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, completed: !completed } : t)),
+      );
+      Alert.alert("Помилка", "Не вдалося оновити статус завдання.");
+      console.error(err);
+    }
+  };
+
+  const handleEdit = async (id: string, text: string) => {
+    try {
+      setTodos((prev) => prev.map((t) => (t.id === id ? { ...t, text } : t)));
+      await updateTodoText(id, text);
+    } catch (err) {
+      fetchTodos();
+      Alert.alert("Помилка", "Не вдалося оновити текст завдання.");
+      console.error(err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      setTodos((prev) => prev.filter((t) => t.id !== id));
+      await deleteTodo(id);
+    } catch (err) {
+      fetchTodos();
+      Alert.alert("Помилка", "Не вдалося видалити завдання.");
+      console.error(err);
+    }
+  };
+
+  const completedCount = useMemo(
+    () => todos.filter((t) => t.completed).length,
+    [todos],
   );
-}
 
-export default function HomeScreen() {
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.card}>
+          <Header totalCount={todos.length} completedCount={completedCount} />
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+          {error && (
+            <View style={styles.errorBanner}>
+              <View style={styles.errorTextContainer}>
+                <Text style={styles.errorTitle}>{"Помилка з'єднання"}</Text>
+                <Text style={styles.errorDesc}>{error}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => fetchTodos()}
+              >
+                <Text style={styles.retryBtnText}>Повторити</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+          <TodoForm onAdd={handleAdd} loading={loading} />
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+          {loading && !refreshing && todos.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#6366f1" />
+              <Text style={styles.loadingText}>Завантаження...</Text>
+            </View>
+          ) : (
+            <View style={styles.listWrapper}>
+              <TodoList
+                todos={todos}
+                refreshing={refreshing}
+                onRefresh={() => fetchTodos(true)}
+                onToggle={handleToggle}
+                onDelete={handleDelete}
+                onEdit={handleEdit}
+              />
+            </View>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+    backgroundColor: "#eef0f7",
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  container: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
   },
-  title: {
-    textAlign: 'center',
+  card: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    margin: 16,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 4,
   },
-  code: {
-    textTransform: 'uppercase',
+  errorBanner: {
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  errorTextContainer: {
+    flex: 1,
+  },
+  errorTitle: {
+    color: "#991b1b",
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  errorDesc: {
+    color: "#991b1b",
+    fontSize: 13,
+  },
+  retryBtn: {
+    backgroundColor: "#dc2626",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  retryBtnText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: "#64748b",
+  },
+  listWrapper: {
+    flex: 1,
   },
 });
