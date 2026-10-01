@@ -1,4 +1,6 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { StyleSheet, Text, View } from "react-native";
+import { useTheme } from "@/context/ThemeContext";
 
 interface HeaderProps {
   totalCount: number;
@@ -6,13 +8,17 @@ interface HeaderProps {
 }
 
 export function Header({ totalCount, completedCount }: HeaderProps) {
+  const { colors } = useTheme();
+
   return (
     <View style={styles.header}>
       <View style={styles.titleGroup}>
-        <Text style={styles.icon}>📝</Text>
-        <Text style={styles.title}>Мій Список Завдань</Text>
+        <Ionicons name="list-circle-outline" size={32} color={colors.primary} />
+        <Text style={[styles.title, { color: colors.text }]}>
+          Мій Список Завдань
+        </Text>
       </View>
-      <Text style={styles.subtitle}>
+      <Text style={[styles.subtitle, { color: colors.textMuted }]}>
         {totalCount > 0
           ? `Виконано ${completedCount} з ${totalCount} завдань`
           : "Додайте своє перше завдання"}
@@ -30,19 +36,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    gap: 10,
     marginBottom: 6,
-  },
-  icon: {
-    fontSize: 28,
   },
   title: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#1e293b",
   },
   subtitle: {
-    color: "#64748b",
     fontSize: 14,
     fontWeight: "400",
   },

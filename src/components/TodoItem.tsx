@@ -1,64 +1,90 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { api } from "@convex/_generated/api";
+import { useMutation } from "convex/react";
+import { ConvexError } from "convex/values";
 import { useState } from "react";
 import {
+  Alert,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { useTheme } from "@/context/ThemeContext";
 import type { Todo } from "@/types";
 
 interface TodoItemProps {
   todo: Todo;
-  onToggle: (id: string, completed: boolean) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-  onEdit: (id: string, text: string) => Promise<void>;
 }
 
-export function TodoItem({ todo, onToggle, onDelete, onEdit }: TodoItemProps) {
+const errorMessage = (err: unknown) =>
+  err instanceof ConvexError && typeof err.data === "string"
+    ? err.data
+    : "Не вдалося виконати дію. Спробуйте ще раз.";
+
+export function TodoItem({ todo }: TodoItemProps) {
+  const { colors } = useTheme();
+  const toggleTodo = useMutation(api.todos.toggleTodo);
+  const updateTodo = useMutation(api.todos.updateTodo);
+  const deleteTodo = useMutation(api.todos.deleteTodo);
+
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(todo.text);
-  const [isUpdating, setIsUpdating] = useState(false);
 
-  const handleSave = async () => {
+  const run = async (action: () => Promise<unknown>) => {
+    try {
+      await action();
+    } catch (err) {
+      Alert.alert("Помилка", errorMessage(err));
+    }
+  };
+
+  const startEditing = () => {
+    setEditText(todo.text);
+    setIsEditing(true);
+  };
+
+  const handleSave = () => {
     const trimmed = editText.trim();
-    if (!trimmed) {
-      setEditText(todo.text);
-      setIsEditing(false);
-      return;
-    }
-    if (trimmed !== todo.text) {
-      try {
-        setIsUpdating(true);
-        await onEdit(todo.id, trimmed);
-      } finally {
-        setIsUpdating(false);
-        setIsEditing(false);
-      }
+    if (trimmed && trimmed !== todo.text) {
+      run(() => updateTodo({ id: todo._id, text: trimmed }));
     } else {
-      setIsEditing(false);
+      setEditText(todo.text);
     }
+    setIsEditing(false);
   };
 
   return (
     <View
       style={[
         styles.item,
-        todo.completed && styles.itemCompleted,
-        isUpdating && styles.itemUpdating,
+        { backgroundColor: colors.bg, borderColor: colors.border },
       ]}
     >
       <TouchableOpacity
-        style={[styles.checkbox, todo.completed && styles.checkboxChecked]}
-        onPress={() => onToggle(todo.id, !todo.completed)}
-        disabled={isUpdating}
+        onPress={() => run(() => toggleTodo({ id: todo._id }))}
+        hitSlop={8}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: todo.isCompleted }}
       >
-        {todo.completed && <Text style={styles.checkmark}>✓</Text>}
+        <Ionicons
+          name={todo.isCompleted ? "checkmark-circle" : "ellipse-outline"}
+          size={26}
+          color={todo.isCompleted ? colors.success : colors.textMuted}
+        />
       </TouchableOpacity>
 
       {isEditing ? (
         <TextInput
-          style={styles.editInput}
+          style={[
+            styles.editInput,
+            {
+              borderColor: colors.primary,
+              backgroundColor: colors.surface,
+              color: colors.text,
+            },
+          ]}
           value={editText}
           onChangeText={setEditText}
           onBlur={handleSave}
@@ -68,12 +94,16 @@ export function TodoItem({ todo, onToggle, onDelete, onEdit }: TodoItemProps) {
           returnKeyType="done"
         />
       ) : (
-        <TouchableOpacity
-          style={styles.textWrapper}
-          onLongPress={() => setIsEditing(true)}
-        >
+        <TouchableOpacity style={styles.textWrapper} onLongPress={startEditing}>
           <Text
-            style={[styles.text, todo.completed && styles.textCompleted]}
+            style={[
+              styles.text,
+              { color: colors.text },
+              todo.isCompleted && {
+                color: colors.textMuted,
+                textDecorationLine: "line-through",
+              },
+            ]}
           >
             {todo.text}
           </Text>
@@ -84,18 +114,18 @@ export function TodoItem({ todo, onToggle, onDelete, onEdit }: TodoItemProps) {
         {!isEditing && (
           <TouchableOpacity
             style={styles.actionBtn}
-            onPress={() => setIsEditing(true)}
-            disabled={isUpdating}
+            onPress={startEditing}
+            accessibilityLabel="Редагувати завдання"
           >
-            <Text style={styles.actionBtnText}>✏️</Text>
+            <Ionicons name="create-outline" size={20} color={colors.primary} />
           </TouchableOpacity>
         )}
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => onDelete(todo.id)}
-          disabled={isUpdating}
+          onPress={() => run(() => deleteTodo({ id: todo._id }))}
+          accessibilityLabel="Видалити завдання"
         >
-          <Text style={styles.actionBtnText}>🗑️</Text>
+          <Ionicons name="trash-outline" size={20} color={colors.danger} />
         </TouchableOpacity>
       </View>
     </View>
@@ -108,48 +138,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 14,
-    backgroundColor: "#f8fafc",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
     gap: 12,
     marginBottom: 8,
-  },
-  itemCompleted: {
-    opacity: 0.9,
-  },
-  itemUpdating: {
-    opacity: 0.6,
-  },
-  checkbox: {
-    height: 22,
-    width: 22,
-    backgroundColor: "#fff",
-    borderWidth: 2,
-    borderColor: "#cbd5e1",
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkboxChecked: {
-    backgroundColor: "#10b981",
-    borderColor: "#10b981",
-  },
-  checkmark: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
   },
   textWrapper: {
     flex: 1,
   },
   text: {
     fontSize: 16,
-    color: "#1e293b",
-  },
-  textCompleted: {
-    color: "#94a3b8",
-    textDecorationLine: "line-through",
   },
   editInput: {
     flex: 1,
@@ -157,20 +155,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     fontSize: 16,
     borderWidth: 1.5,
-    borderColor: "#6366f1",
     borderRadius: 6,
-    backgroundColor: "#fff",
-    color: "#1e293b",
   },
   actions: {
     flexDirection: "row",
-    gap: 6,
+    gap: 4,
   },
   actionBtn: {
     padding: 6,
     borderRadius: 6,
-  },
-  actionBtnText: {
-    fontSize: 16,
   },
 });

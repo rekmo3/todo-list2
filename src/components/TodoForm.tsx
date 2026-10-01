@@ -1,5 +1,9 @@
+import { useTheme } from "@/context/ThemeContext";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { ConvexError } from "convex/values";
 import { useState } from "react";
 import {
+  Alert,
   Keyboard,
   StyleSheet,
   Text,
@@ -9,39 +13,48 @@ import {
 } from "react-native";
 
 interface TodoFormProps {
-  onAdd: (text: string) => Promise<void>;
-  loading: boolean;
+  onAdd: (text: string) => Promise<unknown>;
 }
 
-export function TodoForm({ onAdd, loading }: TodoFormProps) {
+export function TodoForm({ onAdd }: TodoFormProps) {
+  const { colors } = useTheme();
   const [text, setText] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const canSubmit = text.trim().length > 0;
 
   const handleSubmit = async () => {
     const trimmed = text.trim();
-    if (!trimmed || isSubmitting) return;
-
+    if (!trimmed) return;
+    Keyboard.dismiss();
     try {
-      setIsSubmitting(true);
-      Keyboard.dismiss(); // Закриває клавіатуру
       await onAdd(trimmed);
       setText("");
-    } finally {
-      setIsSubmitting(false);
+    } catch (err) {
+      // текст лишається в полі, щоб його не довелося вводити знову
+      Alert.alert(
+        "Помилка",
+        err instanceof ConvexError && typeof err.data === "string"
+          ? err.data
+          : "Не вдалося додати завдання. Спробуйте ще раз.",
+      );
     }
   };
-
-  const disabled = loading || isSubmitting;
 
   return (
     <View style={styles.form}>
       <TextInput
-        style={styles.input}
+        style={[
+          styles.input,
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.bg,
+            color: colors.text,
+          },
+        ]}
         placeholder="Що потрібно зробити?"
-        placeholderTextColor="#94a3b8"
+        placeholderTextColor={colors.textMuted}
         value={text}
         onChangeText={setText}
-        editable={!disabled}
         maxLength={120}
         returnKeyType="done"
         onSubmitEditing={handleSubmit}
@@ -49,14 +62,15 @@ export function TodoForm({ onAdd, loading }: TodoFormProps) {
       <TouchableOpacity
         style={[
           styles.addBtn,
-          (!text.trim() || disabled) && styles.addBtnDisabled,
+          { backgroundColor: colors.primary },
+          !canSubmit && styles.addBtnDisabled,
         ]}
         onPress={handleSubmit}
-        disabled={!text.trim() || disabled}
+        disabled={!canSubmit}
+        accessibilityLabel="Додати завдання"
       >
-        <Text style={styles.addBtnText}>
-          {isSubmitting ? "Додаємо..." : "Додати"}
-        </Text>
+        <Ionicons name="add" size={20} color="#ffffff" />
+        <Text style={styles.addBtnText}>Додати</Text>
       </TouchableOpacity>
     </View>
   );
@@ -74,18 +88,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     borderWidth: 1.5,
-    borderColor: "#e2e8f0",
     borderRadius: 10,
-    backgroundColor: "#f8fafc",
-    color: "#1e293b",
   },
   addBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    backgroundColor: "#6366f1",
-    borderRadius: 10,
-    justifyContent: "center",
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 12,
+    paddingLeft: 12,
+    paddingRight: 16,
+    borderRadius: 10,
   },
   addBtnDisabled: {
     opacity: 0.5,

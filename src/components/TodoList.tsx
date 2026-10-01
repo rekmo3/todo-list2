@@ -1,28 +1,39 @@
-import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useTheme } from "@/context/ThemeContext";
 import type { Todo } from "@/types";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { TodoItem } from "./TodoItem";
 
 interface TodoListProps {
-  todos: Todo[];
-  refreshing: boolean;
-  onRefresh: () => Promise<void>;
-  onToggle: (id: string, completed: boolean) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-  onEdit: (id: string, text: string) => Promise<void>;
+  /** `undefined` — Convex ще завантажує дані */
+  todos: Todo[] | undefined;
 }
 
-export function TodoList({
-  todos,
-  refreshing,
-  onRefresh,
-  onToggle,
-  onDelete,
-  onEdit,
-}: TodoListProps) {
+export function TodoList({ todos }: TodoListProps) {
+  const { colors } = useTheme();
+
+  if (todos === undefined) {
+    return (
+      <View style={styles.emptyContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+          Синхронізація з Convex...
+        </Text>
+      </View>
+    );
+  }
+
   if (todos.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>
+        <Ionicons name="clipboard-outline" size={48} color={colors.textMuted} />
+        <Text style={[styles.emptyText, { color: colors.textMuted }]}>
           Список завдань порожній. Додайте нове завдання!
         </Text>
       </View>
@@ -32,24 +43,11 @@ export function TodoList({
   return (
     <FlatList
       data={todos}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => (
-        <TodoItem
-          todo={item}
-          onToggle={onToggle}
-          onDelete={onDelete}
-          onEdit={onEdit}
-        />
-      )}
+      keyExtractor={(item) => item._id}
+      renderItem={({ item }) => <TodoItem todo={item} />}
       contentContainerStyle={styles.listContent}
       showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={["#6366f1"]}
-        />
-      }
+      keyboardShouldPersistTaps="handled"
     />
   );
 }
@@ -60,12 +58,12 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     alignItems: "center",
+    gap: 12,
     paddingVertical: 36,
     paddingHorizontal: 16,
   },
   emptyText: {
     fontSize: 15,
-    color: "#94a3b8",
     textAlign: "center",
   },
 });
